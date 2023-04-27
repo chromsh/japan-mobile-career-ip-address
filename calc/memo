@@ -1,0 +1,3 @@
+- 更新時は、各サイトからデータをコピペしてそれぞれのファイルにコピペする
+- IPアドレス帯ごとにマージし、結果を data/{career}.json にコピペする。その後適切にformatをかける(vscodeなどで)
+  `go run main.go file file`
