@@ -49,14 +49,19 @@ func mergeIPAddrFromFile(files []string) ([]*ipaddr.IPAddress, error) {
 		defer f.Close()
 		scanner := bufio.NewScanner(f)
 		for scanner.Scan() {
-			line := scanner.Text()
-			ip := ipaddr.NewIPAddressString(line).GetAddress()
-			if ip == nil || ip.IsZero() {
-				// println("nil ip " + line)
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
 				continue
 			}
-			if strings.HasPrefix(line, "-") {
-				ip = ipaddr.NewIPAddressString(line[1:]).GetAddress()
+			exclude := strings.HasPrefix(line, "-")
+			if exclude {
+				line = strings.TrimSpace(line[1:])
+			}
+			ip := ipaddr.NewIPAddressString(line).GetAddress()
+			if ip == nil {
+				return nil, fmt.Errorf("%s: invalid IP address %q", file, scanner.Text())
+			}
+			if exclude {
 				// 削除対象アドレス
 				subIPs = append(subIPs, ip)
 				continue
@@ -68,24 +73,21 @@ func mergeIPAddrFromFile(files []string) ([]*ipaddr.IPAddress, error) {
 		}
 	}
 
+	if len(mergeIPs) == 0 {
+		return nil, nil
+	}
 	mergedIPs := mergeIPs[0].MergeToPrefixBlocks(mergeIPs[1:]...)
 	// 引き算
-	var ips []*ipaddr.IPAddress
-	for _, mergedIP := range mergedIPs {
-		isSubtracted := false
-		for _, subIP := range subIPs {
-			println(subIP.String())
-			subtracted := mergedIP.Subtract(subIP)
-			if len(subtracted) == 0 || mergedIP.Equal(subtracted[0]) {
-				continue
-			}
-			ips = append(ips, subtracted...)
-			isSubtracted = true
+	for _, subIP := range subIPs {
+		var remaining []*ipaddr.IPAddress
+		for _, mergedIP := range mergedIPs {
+			remaining = append(remaining, mergedIP.Subtract(subIP)...)
 		}
-		if !isSubtracted {
-			ips = append(ips, mergedIP)
-		}
+		mergedIPs = remaining
+	}
+	if len(mergedIPs) == 0 {
+		return nil, nil
 	}
 	// 再度マージして返す。おそらくマージしなくて良いがとりあえず
-	return ips[0].MergeToPrefixBlocks(ips[1:]...), nil
+	return mergedIPs[0].MergeToPrefixBlocks(mergedIPs[1:]...), nil
 }
